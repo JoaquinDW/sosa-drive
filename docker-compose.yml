@@ -1,0 +1,48 @@
+# Stack self-hosted de Sosa Drive: PostgreSQL + Redis.
+# Levantalo con `npm run db:up` y sembralo con `npm run db:seed`.
+services:
+  postgres:
+    image: postgres:17
+    container_name: sosa-postgres
+    environment:
+      POSTGRES_USER: sosa
+      POSTGRES_PASSWORD: sosa
+      POSTGRES_DB: sosa_drive
+    ports:
+      - "5432:5432"
+    volumes:
+      - sosa-postgres-data:/var/lib/postgresql/data
+      # Las migraciones corren en orden alfabético al primer init (base vacía).
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sosa -d sosa_drive"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: sosa-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - sosa-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Explorador web de la base (opcional): http://localhost:8080
+  adminer:
+    image: adminer:5
+    container_name: sosa-adminer
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  sosa-postgres-data:
+  sosa-redis-data:
