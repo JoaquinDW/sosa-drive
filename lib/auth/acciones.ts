@@ -12,6 +12,7 @@ export interface EstadoLogin {
 interface FilaCredenciales {
   id: string;
   password_hash: string;
+  activo: boolean;
 }
 
 /**
@@ -30,7 +31,7 @@ export async function iniciarSesion(
   }
 
   const filas = await query<FilaCredenciales>(
-    "select id, password_hash from perfiles where lower(email) = $1",
+    "select id, password_hash, activo from perfiles where lower(email) = $1",
     [email],
   );
   const perfil = filas[0];
@@ -39,6 +40,12 @@ export async function iniciarSesion(
     return {
       error:
         "No pudimos iniciar tu sesión. Revisá el email y la contraseña e intentá de nuevo.",
+    };
+  }
+
+  if (!perfil.activo) {
+    return {
+      error: "Tu acceso fue desactivado. Consultá con tu gerente.",
     };
   }
 

@@ -1,4 +1,9 @@
-export type Rol = "gerente" | "vendedor";
+export type Rol =
+  | "gerente"
+  | "vendedor"
+  | "administracion"
+  | "contabilidad"
+  | "taller";
 
 export type EstadoLead =
   | "nuevo"
@@ -61,6 +66,16 @@ export interface Vendedor {
   conversion: number; // 0..1
   tiempoRespuestaSeg: number;
   leadsAbiertos: number;
+}
+
+export interface MiembroEquipo {
+  id: string;
+  nombre: string;
+  email: string;
+  rol: Rol;
+  avatarUrl?: string;
+  activo: boolean;
+  creadoEn: string;
 }
 
 export interface Insignia {
@@ -399,6 +414,10 @@ export interface Credito {
   cuotaMensual?: number;
   totalAPagar?: number;
   cantidadCuotas?: number;
+  /** Día del mes en que vence cada cuota; el plan se deriva de acá. */
+  diaPago?: number;
+  /** Vencimiento de la cuota 1: ancla del plan. */
+  fechaInicio?: string; // YYYY-MM-DD
   estado: EstadoCredito;
   observaciones?: string;
   creadoEn: string; // YYYY-MM-DD
@@ -412,6 +431,19 @@ export interface Cuota {
   monto: number;
   estado: EstadoCuota;
   pagadaEn?: string; // YYYY-MM-DD
+}
+
+/** Vista derivada de un plan: cómo viene pagando el cliente. */
+export interface ResumenPlan {
+  estado: EstadoCredito;
+  cuotas: number;
+  cuotasPagadas: number;
+  cuotasVencidas: number;
+  cobrado: number;
+  montoVencido: number;
+  /** Lo que falta cobrar: vencido + por vencer. */
+  saldo: number;
+  proximoVencimiento?: string; // YYYY-MM-DD
 }
 
 /** Vista derivada para administración: clientes con cuotas vencidas. */
@@ -526,6 +558,33 @@ export interface RegistroAuditoria {
   accion: string;
   entidad: string;
   detalle: string;
+}
+
+/**
+ * Alerta derivada de los datos de operaciones (stock sin precio, mora, taller
+ * demorado…). No es la "alerta IA" de la Fase 2: acá no hay modelo, son reglas
+ * calculadas sobre lo que ya está registrado.
+ */
+export interface AlertaOperativa {
+  id: string;
+  severidad: "alta" | "media" | "baja";
+  mensaje: string;
+  accion?: { etiqueta: string; href: string };
+}
+
+/** Ranking de vendedores del mes, calculado desde las ventas registradas. */
+export interface RankingVendedor {
+  nombre: string;
+  ventas: number;
+  facturacion: number;
+  ganancia: number;
+}
+
+/** Cuota por vencer en los próximos días, con el cliente y la moto del plan. */
+export interface VencimientoProximo {
+  cuota: Cuota;
+  clienteNombre: string;
+  descripcionMoto: string;
 }
 
 export interface KpisFinancieros {

@@ -32,6 +32,7 @@ export function FormularioDialogo({
   descripcion,
   textoDisparador = "Agregar",
   textoGuardar = "Guardar",
+  disparador,
   accion,
   children,
 }: {
@@ -39,6 +40,8 @@ export function FormularioDialogo({
   descripcion?: string;
   textoDisparador?: string;
   textoGuardar?: string;
+  /** Reemplaza el botón "Agregar" por defecto (por ejemplo, un ícono de editar). */
+  disparador?: ReactNode;
   accion: AccionFormulario;
   children: ReactNode;
 }) {
@@ -68,10 +71,12 @@ export function FormularioDialogo({
   return (
     <Dialog open={abierto} onOpenChange={cambiarApertura}>
       <DialogTrigger asChild>
-        <Button>
-          <Plus aria-hidden="true" />
-          {textoDisparador}
-        </Button>
+        {disparador ?? (
+          <Button>
+            <Plus aria-hidden="true" />
+            {textoDisparador}
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>

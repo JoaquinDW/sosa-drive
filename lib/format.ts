@@ -33,6 +33,21 @@ export function formatearDuracion(segundos: number): string {
   return seg > 0 ? `${min}m ${seg}s` : `${min}m`;
 }
 
+const MESES = [
+  "enero", "febrero", "marzo", "abril", "mayo", "junio",
+  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+];
+
+/** "2026-07" → "julio". */
+export function nombreMes(anioMes: string): string {
+  return MESES[Number(anioMes.slice(5, 7)) - 1] ?? anioMes;
+}
+
+/** "2026-07" → "julio 2026". */
+export function formatearMes(anioMes: string): string {
+  return `${nombreMes(anioMes)} ${anioMes.slice(0, 4)}`;
+}
+
 export function formatearFecha(iso: string): string {
   return new Date(iso).toLocaleDateString("es-AR", {
     day: "numeric",
@@ -71,6 +86,15 @@ export function tiempoRelativo(iso: string): string {
 
   if (texto === "ahora") return texto;
   return futuro ? `en ${texto}` : `hace ${texto}`;
+}
+
+/** "3 órdenes" / "1 orden": evita el clásico "1 órdenes". */
+export function pluralizar(
+  cantidad: number,
+  singular: string,
+  plural: string,
+): string {
+  return `${formatearNumero(cantidad)} ${cantidad === 1 ? singular : plural}`;
 }
 
 export function iniciales(nombre: string): string {

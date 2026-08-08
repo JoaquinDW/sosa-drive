@@ -359,6 +359,8 @@ async function main() {
         cuota_mensual: c.cuotaMensual ?? null,
         total_a_pagar: c.totalAPagar ?? null,
         cantidad_cuotas: c.cantidadCuotas ?? null,
+        dia_pago: c.diaPago ?? null,
+        fecha_inicio: c.fechaInicio ?? null,
         estado: c.estado,
         observaciones: c.observaciones ?? null,
         creado_en: c.creadoEn,

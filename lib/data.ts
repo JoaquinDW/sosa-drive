@@ -10,6 +10,7 @@ import type {
   KpisHoy,
   Lead,
   Mensaje,
+  MiembroEquipo,
   Moto,
   OrigenLeads,
   Tarea,
@@ -122,7 +123,9 @@ export async function obtenerUnidadesStock(): Promise<UnidadStock[]> {
 }
 
 export async function obtenerVendedores(): Promise<Vendedor[]> {
-  const filas = await query("select * from perfiles where rol = 'vendedor'");
+  const filas = await query(
+    "select * from perfiles where rol = 'vendedor' and activo = true",
+  );
   return filas.map((f) => ({
     id: f.id,
     nombre: f.nombre,
@@ -137,6 +140,21 @@ export async function obtenerVendedores(): Promise<Vendedor[]> {
     conversion: 0,
     tiempoRespuestaSeg: 0,
     leadsAbiertos: 0,
+  }));
+}
+
+export async function obtenerMiembrosEquipo(): Promise<MiembroEquipo[]> {
+  const filas = await query(
+    "select id, nombre, email, rol, avatar_url, activo, creado_en from perfiles order by creado_en desc",
+  );
+  return filas.map((f) => ({
+    id: f.id,
+    nombre: f.nombre,
+    email: f.email,
+    rol: f.rol,
+    avatarUrl: f.avatar_url ?? undefined,
+    activo: f.activo,
+    creadoEn: f.creado_en,
   }));
 }
 

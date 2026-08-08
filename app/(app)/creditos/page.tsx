@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   AlertTriangle,
   CalendarClock,
@@ -36,9 +37,10 @@ import {
   obtenerKpisFinancieros,
   obtenerUnidadesInventario,
   obtenerVentas,
+  resumirPlan,
 } from "@/lib/data-operaciones";
 import { formatearFecha, formatearPesos, formatearPesosCompacto } from "@/lib/format";
-import { NuevoCredito } from "./formularios";
+import { EditarCredito, NuevoCredito } from "./formularios";
 
 export const metadata = { title: "Créditos" };
 
@@ -76,15 +78,16 @@ export default async function CreditosPage() {
     )
     .sort((a, b) => (a.vencimiento < b.vencimiento ? -1 : 1));
 
-  const pagadasPorCredito = new Map<string, number>();
-  for (const c of efectivas) {
-    if (c.estado === "pagada") {
-      pagadasPorCredito.set(
-        c.creditoId,
-        (pagadasPorCredito.get(c.creditoId) ?? 0) + 1,
-      );
-    }
+  const cuotasPorCredito = new Map<string, typeof cuotas>();
+  for (const cuota of cuotas) {
+    const propias = cuotasPorCredito.get(cuota.creditoId) ?? [];
+    propias.push(cuota);
+    cuotasPorCredito.set(cuota.creditoId, propias);
   }
+  // El estado y el saldo salen de las cuotas, no del enum guardado.
+  const resumenes = new Map(
+    creditos.map((c) => [c.id, resumirPlan(c, cuotasPorCredito.get(c.id) ?? [])]),
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -159,7 +162,12 @@ export default async function CreditosPage() {
                     {deudores.map((d) => (
                       <TableRow key={d.credito.id}>
                         <TableCell>
-                          <p className="font-medium">{d.cliente.nombre}</p>
+                          <Link
+                            href={`/creditos/${d.credito.id}`}
+                            className="font-medium hover:underline"
+                          >
+                            {d.cliente.nombre}
+                          </Link>
                           <p className="text-xs text-muted-foreground">
                             {d.cliente.telefono}
                           </p>
@@ -228,10 +236,11 @@ export default async function CreditosPage() {
                       <TableHead>Cliente</TableHead>
                       <TableHead>Moto</TableHead>
                       <TableHead className="text-right">Cuota mensual</TableHead>
+                      <TableHead>Día de pago</TableHead>
                       <TableHead className="text-right">Cuotas</TableHead>
-                      <TableHead className="text-right">Total del plan</TableHead>
+                      <TableHead className="text-right">Saldo</TableHead>
                       <TableHead>Estado</TableHead>
-                      <TableHead>Observaciones</TableHead>
+                      <TableHead />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -240,14 +249,19 @@ export default async function CreditosPage() {
                       const venta = c.ventaId
                         ? ventasPorId.get(c.ventaId)
                         : undefined;
-                      const pagadas = pagadasPorCredito.get(c.id) ?? 0;
+                      const resumen = resumenes.get(c.id)!;
                       return (
                         <TableRow key={c.id}>
                           <TableCell className="font-mono text-xs text-muted-foreground">
                             {c.numero ?? "—"}
                           </TableCell>
                           <TableCell className="font-medium">
-                            {cliente?.nombre ?? "Sin nombre"}
+                            <Link
+                              href={`/creditos/${c.id}`}
+                              className="hover:underline"
+                            >
+                              {cliente?.nombre ?? "Sin nombre"}
+                            </Link>
                           </TableCell>
                           <TableCell className="max-w-52 truncate">
                             {c.descripcionMoto ?? venta?.descripcion ?? "—"}
@@ -257,19 +271,30 @@ export default async function CreditosPage() {
                               ? formatearPesos(c.cuotaMensual)
                               : "—"}
                           </TableCell>
-                          <TableCell className="text-right tabular-nums">
-                            {pagadas}/{c.cantidadCuotas ?? "—"}
+                          <TableCell className="whitespace-nowrap tabular-nums">
+                            {c.diaPago ? (
+                              `Todos los ${c.diaPago}`
+                            ) : (
+                              <span className="text-xs text-destructive">
+                                Sin definir
+                              </span>
+                            )}
                           </TableCell>
                           <TableCell className="text-right tabular-nums">
-                            {c.totalAPagar !== undefined
-                              ? formatearPesos(c.totalAPagar)
-                              : "—"}
+                            {resumen.cuotasPagadas}/{c.cantidadCuotas ?? "—"}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">
+                            {formatearPesos(resumen.saldo)}
                           </TableCell>
                           <TableCell>
-                            <BadgeEstadoCredito estado={c.estado} />
+                            <BadgeEstadoCredito estado={resumen.estado} />
                           </TableCell>
-                          <TableCell className="max-w-48 truncate text-xs text-muted-foreground">
-                            {c.observaciones ?? ""}
+                          <TableCell className="text-right">
+                            <EditarCredito
+                              credito={c}
+                              clientes={opcionesCliente}
+                              cuotasPagadas={resumen.cuotasPagadas}
+                            />
                           </TableCell>
                         </TableRow>
                       );

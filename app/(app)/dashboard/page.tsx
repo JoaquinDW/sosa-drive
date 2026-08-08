@@ -2,15 +2,15 @@ import {
   AlertTriangle,
   ArrowRight,
   Banknote,
-  CalendarCheck,
-  Flame,
-  MessageSquareWarning,
-  Percent,
-  Timer,
+  CalendarClock,
+  HandCoins,
+  Receipt,
   TrendingUp,
-  Users,
+  Wallet,
+  Warehouse,
+  Wrench,
 } from "lucide-react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,117 +20,103 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Embudo, ListaBarras, Medidor } from "@/components/app/charts";
+import { ListaBarras, Medidor } from "@/components/app/charts";
+import { BadgeEstadoOrden } from "@/components/app/badges-operaciones";
 import { KpiCard } from "@/components/app/kpi-card";
 import {
-  obtenerAlertas,
-  obtenerEmbudo,
-  obtenerKpis,
-  obtenerOrigenLeads,
-  obtenerVendedores,
-} from "@/lib/data";
+  calcularMesActivo,
+  obtenerAlertasOperativas,
+  obtenerKpisFinancieros,
+  obtenerMovimientosCaja,
+  obtenerOrdenesTaller,
+  obtenerProximosVencimientos,
+  obtenerRankingVendedores,
+  obtenerVentas,
+} from "@/lib/data-operaciones";
 import {
-  formatearDuracion,
+  formatearFecha,
+  formatearMes,
   formatearNumero,
+  formatearPesos,
   formatearPesosCompacto,
-  formatearPorcentaje,
-  iniciales,
+  nombreMes,
+  pluralizar,
 } from "@/lib/format";
-import { FUENTES_LEAD } from "@/lib/labels";
+import { CATEGORIAS_CAJA } from "@/lib/labels";
+import type { EstadoOrdenTaller } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export const metadata = { title: "Dashboard" };
 
-export default async function DashboardPage() {
-  const [kpis, embudo, origen, vendedores, alertas] = await Promise.all([
-    obtenerKpis(),
-    obtenerEmbudo(),
-    obtenerOrigenLeads(),
-    obtenerVendedores(),
-    obtenerAlertas(),
-  ]);
+const ESTADOS_TALLER_ABIERTOS: EstadoOrdenTaller[] = [
+  "pendiente",
+  "en_reparacion",
+  "esperando_repuestos",
+];
 
-  const ranking = [...vendedores].sort(
-    (a, b) => b.facturacionMes - a.facturacionMes,
+export default async function DashboardPage() {
+  const [kpis, alertas, ranking, vencimientos, ventas, ordenes, caja] =
+    await Promise.all([
+      obtenerKpisFinancieros(),
+      obtenerAlertasOperativas(),
+      obtenerRankingVendedores(),
+      // Las cuotas de la cartera son mensuales: con 7 días la lista queda vacía
+      // casi siempre.
+      obtenerProximosVencimientos(30),
+      obtenerVentas(),
+      obtenerOrdenesTaller(),
+      obtenerMovimientosCaja(),
+    ]);
+
+  const mesActivo = calcularMesActivo(ventas);
+  const mes = nombreMes(mesActivo);
+
+  // Serie de ventas: últimos seis meses con actividad.
+  const porMes = new Map<string, number>();
+  for (const v of ventas) {
+    const m = v.fecha.slice(0, 7);
+    porMes.set(m, (porMes.get(m) ?? 0) + 1);
+  }
+  const serieVentas = [...porMes.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .slice(-6);
+
+  const maxFacturacion = Math.max(...ranking.map((v) => v.facturacion), 1);
+
+  const enTaller = ordenes.filter((o) =>
+    ESTADOS_TALLER_ABIERTOS.includes(o.estado),
   );
-  const maxFacturacion = Math.max(...ranking.map((v) => v.facturacionMes), 1);
+  const totalPorCobrar = vencimientos.reduce((acc, v) => acc + v.cuota.monto, 0);
+  const ultimosMovimientos = caja.slice(0, 6);
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="font-heading text-2xl font-semibold tracking-tight">
-          Hoy en Sosa Motos
+          Hoy en Sosa Drive
         </h2>
         <p className="text-sm text-muted-foreground">
           {new Date().toLocaleDateString("es-AR", {
             weekday: "long",
             day: "numeric",
             month: "long",
-          })}
+          })}{" "}
+          · los indicadores del mes son de {formatearMes(mesActivo)}.
         </p>
       </div>
 
-      {/* KPIs del día */}
-      <section
-        aria-label="Indicadores del día"
-        className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4"
-      >
-        <KpiCard
-          etiqueta="Leads de hoy"
-          valor={formatearNumero(kpis.leads)}
-          icono={Users}
-          deltaPct={kpis.leadsDeltaPct || undefined}
-        />
-        <KpiCard
-          etiqueta="Sin responder"
-          valor={formatearNumero(kpis.sinResponder)}
-          icono={MessageSquareWarning}
-          destacado={kpis.sinResponder > 0}
-        />
-        <KpiCard
-          etiqueta="Leads calientes"
-          valor={formatearNumero(kpis.calientes)}
-          icono={Flame}
-        />
-        <KpiCard
-          etiqueta="Visitas agendadas"
-          valor={formatearNumero(kpis.visitasAgendadas)}
-          icono={CalendarCheck}
-        />
-        <KpiCard
-          etiqueta="Ventas"
-          valor={formatearNumero(kpis.ventas)}
-          icono={TrendingUp}
-        />
-        <KpiCard
-          etiqueta="Facturación"
-          valor={formatearPesosCompacto(kpis.facturacion)}
-          icono={Banknote}
-          deltaPct={kpis.facturacionDeltaPct || undefined}
-        />
-        <KpiCard
-          etiqueta="Conversión"
-          valor={formatearPorcentaje(kpis.conversion)}
-          icono={Percent}
-        />
-        <KpiCard
-          etiqueta="Respuesta promedio"
-          valor={formatearDuracion(kpis.tiempoRespuestaSeg)}
-          icono={Timer}
-        />
-      </section>
-
-      {/* Alertas IA */}
       {alertas.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 font-heading text-base">
-              <AlertTriangle className="size-4 text-warning" aria-hidden="true" />
-              Alertas de la IA
+              <AlertTriangle
+                className="size-4 text-warning"
+                aria-hidden="true"
+              />
+              Lo que hay que mirar
             </CardTitle>
             <CardDescription>
-              La IA analiza la operación y te avisa antes de que un problema
-              crezca.
+              Calculado sobre lo que ya está registrado en operaciones.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-2.5">
@@ -158,9 +144,16 @@ export default async function DashboardPage() {
                   <p className="text-sm">{alerta.mensaje}</p>
                 </div>
                 {alerta.accion && (
-                  <Button variant="ghost" size="sm" className="gap-1 text-xs">
-                    {alerta.accion}
-                    <ArrowRight className="size-3" aria-hidden="true" />
+                  <Button
+                    asChild
+                    variant="ghost"
+                    size="sm"
+                    className="gap-1 text-xs"
+                  >
+                    <Link href={alerta.accion.href}>
+                      {alerta.accion.etiqueta}
+                      <ArrowRight className="size-3" aria-hidden="true" />
+                    </Link>
                   </Button>
                 )}
               </div>
@@ -169,90 +162,249 @@ export default async function DashboardPage() {
         </Card>
       )}
 
+      <section
+        aria-label={`Indicadores de ${formatearMes(mesActivo)}`}
+        className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4"
+      >
+        <KpiCard
+          etiqueta={`Ventas de ${mes}`}
+          valor={formatearNumero(kpis.ventasMes)}
+          icono={TrendingUp}
+        />
+        <KpiCard
+          etiqueta="Facturación"
+          valor={formatearPesosCompacto(kpis.facturacionMes)}
+          icono={Banknote}
+        />
+        <KpiCard
+          etiqueta="Ganancia neta"
+          valor={formatearPesosCompacto(kpis.gananciaNetaMes)}
+          icono={TrendingUp}
+          destacado={kpis.gananciaNetaMes < 0}
+        />
+        <KpiCard
+          etiqueta="Gastos del mes"
+          valor={formatearPesosCompacto(kpis.gastosMes)}
+          icono={Receipt}
+        />
+        <KpiCard
+          etiqueta="Unidades en stock"
+          valor={formatearNumero(kpis.stockTotal)}
+          icono={Warehouse}
+        />
+        <KpiCard
+          etiqueta="Saldo de caja"
+          valor={formatearPesosCompacto(kpis.saldoCaja)}
+          icono={Wallet}
+          destacado={kpis.saldoCaja < 0}
+        />
+        <KpiCard
+          etiqueta="Pendiente de cobro"
+          valor={formatearPesosCompacto(kpis.pendienteCobro)}
+          icono={HandCoins}
+        />
+        <KpiCard
+          etiqueta="Clientes en mora"
+          valor={formatearNumero(kpis.deudores)}
+          icono={AlertTriangle}
+          destacado={kpis.deudores > 0}
+        />
+      </section>
+
       <div className="grid gap-4 lg:grid-cols-2">
-        {/* Embudo */}
         <Card>
           <CardHeader>
             <CardTitle className="font-heading text-base">
-              Embudo de ventas
+              Ventas por mes
             </CardTitle>
-            <CardDescription>Del lead a la venta, este mes</CardDescription>
+            <CardDescription>
+              Unidades vendidas en los últimos meses con actividad.
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <Embudo
-              datos={embudo.map((e) => ({
-                etiqueta: e.etapa,
-                valor: e.cantidad,
-              }))}
-              descripcion={`Embudo de ventas: ${embudo
-                .map((e) => `${e.etapa} ${e.cantidad}`)
-                .join(", ")}`}
-            />
+            {serieVentas.length > 0 ? (
+              <ListaBarras
+                descripcion={`Ventas por mes: ${serieVentas
+                  .map(([m, c]) => `${formatearMes(m)} ${c}`)
+                  .join(", ")}`}
+                datos={serieVentas.map(([m, cantidad]) => ({
+                  etiqueta: formatearMes(m),
+                  valor: cantidad,
+                }))}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Todavía no hay ventas registradas.
+              </p>
+            )}
           </CardContent>
         </Card>
 
-        {/* Origen de leads */}
         <Card>
           <CardHeader>
             <CardTitle className="font-heading text-base">
-              Origen de los leads
+              Ranking de vendedores
             </CardTitle>
-            <CardDescription>De dónde llegan tus clientes hoy</CardDescription>
+            <CardDescription>
+              Facturación y ganancia de {mes}.
+            </CardDescription>
           </CardHeader>
-          <CardContent>
-            <ListaBarras
-              datos={origen.map((o) => ({
-                etiqueta: FUENTES_LEAD[o.fuente],
-                valor: o.cantidad,
-              }))}
-              descripcion={`Origen de leads: ${origen
-                .map((o) => `${FUENTES_LEAD[o.fuente]} ${o.cantidad}`)
-                .join(", ")}`}
-            />
+          <CardContent className="flex flex-col gap-4">
+            {ranking.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                Ninguna venta registrada en {mes}.
+              </p>
+            )}
+            {ranking.map((v, i) => (
+              <div key={v.nombre} className="flex flex-col gap-1.5">
+                <div className="flex items-baseline justify-between gap-3">
+                  <p className="truncate text-sm font-medium">
+                    <span className="mr-2 text-muted-foreground">{i + 1}</span>
+                    {v.nombre}
+                  </p>
+                  <p className="shrink-0 text-sm font-medium tabular-nums">
+                    {formatearPesosCompacto(v.facturacion)}
+                  </p>
+                </div>
+                <Medidor valor={v.facturacion} max={maxFacturacion} />
+                <p className="text-xs text-muted-foreground">
+                  {pluralizar(v.ventas, "venta", "ventas")} ·{" "}
+                  {formatearPesosCompacto(v.ganancia)} de ganancia
+                </p>
+              </div>
+            ))}
           </CardContent>
         </Card>
       </div>
 
-      {/* Ranking de vendedores */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 font-heading text-base">
+              <CalendarClock className="size-4" aria-hidden="true" />
+              Cobranzas de los próximos 30 días
+            </CardTitle>
+            <CardDescription>
+              {vencimientos.length > 0
+                ? `${pluralizar(vencimientos.length, "cuota", "cuotas")} por ${formatearPesos(totalPorCobrar)}.`
+                : "Sin cuotas por vencer en el próximo mes."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2.5">
+            {vencimientos.slice(0, 6).map((v) => (
+              <div
+                key={v.cuota.id}
+                className="flex items-center justify-between gap-3 border-b pb-2 last:border-0 last:pb-0"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">
+                    {v.clienteNombre}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    Cuota {v.cuota.numero} · {v.descripcionMoto}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-sm font-medium tabular-nums">
+                    {formatearPesos(v.cuota.monto)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    vence {formatearFecha(v.cuota.vencimiento)}
+                  </p>
+                </div>
+              </div>
+            ))}
+            <Button asChild variant="ghost" size="sm" className="self-start gap-1 text-xs">
+              <Link href="/creditos">
+                {vencimientos.length > 6
+                  ? `Ver las ${formatearNumero(vencimientos.length)} cuotas`
+                  : "Ver créditos"}
+                <ArrowRight className="size-3" aria-hidden="true" />
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 font-heading text-base">
+              <Wrench className="size-4" aria-hidden="true" />
+              Taller en curso
+            </CardTitle>
+            <CardDescription>
+              {enTaller.length > 0
+                ? `${pluralizar(enTaller.length, "orden abierta", "órdenes abiertas")}.`
+                : "No hay órdenes abiertas."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-2.5">
+            {enTaller.slice(0, 6).map((o) => (
+              <div
+                key={o.id}
+                className="flex items-center justify-between gap-3 border-b pb-2 last:border-0 last:pb-0"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">
+                    #{o.numero} · {o.motoDescripcion}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {o.clienteNombre} · {o.motivo}
+                  </p>
+                </div>
+                <BadgeEstadoOrden estado={o.estado} />
+              </div>
+            ))}
+            <Button asChild variant="ghost" size="sm" className="self-start gap-1 text-xs">
+              <Link href="/taller">
+                {enTaller.length > 6
+                  ? `Ver las ${formatearNumero(enTaller.length)} órdenes`
+                  : "Ver taller"}
+                <ArrowRight className="size-3" aria-hidden="true" />
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+
       <Card>
         <CardHeader>
-          <CardTitle className="font-heading text-base">
-            Ranking de vendedores
+          <CardTitle className="flex items-center gap-2 font-heading text-base">
+            <Wallet className="size-4" aria-hidden="true" />
+            Últimos movimientos de caja
           </CardTitle>
-          <CardDescription>Facturación y conversión del mes</CardDescription>
+          <CardDescription>
+            Saldo actual: {formatearPesos(kpis.saldoCaja)}.
+          </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          {ranking.map((v, i) => (
+        <CardContent className="flex flex-col gap-2.5">
+          {ultimosMovimientos.map((m) => (
             <div
-              key={v.id}
-              className="grid grid-cols-[auto_1fr_auto] items-center gap-3 sm:grid-cols-[auto_12rem_1fr_auto] sm:gap-4"
+              key={m.id}
+              className="flex items-center justify-between gap-3 border-b pb-2 last:border-0 last:pb-0"
             >
-              <div className="flex items-center gap-3">
-                <span className="w-5 text-center font-heading text-sm font-semibold text-muted-foreground">
-                  {i + 1}
-                </span>
-                <Avatar className="size-9">
-                  <AvatarFallback className="bg-secondary text-xs font-semibold">
-                    {iniciales(v.nombre)}
-                  </AvatarFallback>
-                </Avatar>
-              </div>
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium">{v.nombre}</p>
+                <p className="truncate text-sm">{m.descripcion}</p>
                 <p className="text-xs text-muted-foreground">
-                  {formatearNumero(v.ventasMes)} ventas ·{" "}
-                  {formatearPorcentaje(v.conversion)} conversión ·{" "}
-                  {formatearDuracion(v.tiempoRespuestaSeg)} respuesta
+                  {formatearFecha(m.fecha)} · {CATEGORIAS_CAJA[m.categoria]}
                 </p>
               </div>
-              <div className="col-span-3 sm:col-span-1">
-                <Medidor valor={v.facturacionMes} max={maxFacturacion} />
-              </div>
-              <p className="hidden text-right text-sm font-medium tabular-nums sm:block">
-                {formatearPesosCompacto(v.facturacionMes)}
+              <p
+                className={cn(
+                  "shrink-0 text-sm font-medium tabular-nums",
+                  m.tipo === "ingreso" ? "text-success" : "text-destructive",
+                )}
+              >
+                {m.tipo === "ingreso" ? "+" : "−"}
+                {formatearPesos(m.monto)}
               </p>
             </div>
           ))}
+          <Button asChild variant="ghost" size="sm" className="self-start gap-1 text-xs">
+            <Link href="/caja">
+              Ver caja
+              <ArrowRight className="size-3" aria-hidden="true" />
+            </Link>
+          </Button>
         </CardContent>
       </Card>
     </div>

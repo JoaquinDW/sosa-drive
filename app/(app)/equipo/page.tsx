@@ -18,15 +18,32 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Medidor } from "@/components/app/charts";
-import { obtenerVendedores } from "@/lib/data";
+import { usuarioActual } from "@/lib/auth";
+import { obtenerMiembrosEquipo, obtenerVendedores } from "@/lib/data";
 import {
   formatearDuracion,
+  formatearFecha,
   formatearNumero,
   formatearPesosCompacto,
   formatearPorcentaje,
   iniciales,
 } from "@/lib/format";
+import { ROLES_USUARIO } from "@/lib/labels";
+import {
+  EditarMiembroEquipo,
+  EliminarMiembroEquipo,
+  NuevoMiembroEquipo,
+  ReactivarMiembroEquipo,
+} from "./formularios";
 
 export const metadata = { title: "Equipo" };
 
@@ -41,16 +58,107 @@ const ICONOS_INSIGNIA: Record<string, LucideIcon> = {
 const XP_POR_NIVEL = 700;
 
 export default async function EquipoPage() {
-  const vendedores = await obtenerVendedores();
+  const [vendedores, miembros, usuario] = await Promise.all([
+    obtenerVendedores(),
+    obtenerMiembrosEquipo(),
+    usuarioActual(),
+  ]);
   const ranking = [...vendedores].sort((a, b) => b.xp - a.xp);
   const maxVentas = Math.max(...ranking.map((v) => v.ventasMes), 1);
 
   return (
     <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="font-heading text-2xl font-semibold tracking-tight">
+            Equipo
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Ventas, administración, contabilidad y taller: todo el equipo y
+            su acceso al sistema.
+          </p>
+        </div>
+        {usuario.rol === "gerente" && <NuevoMiembroEquipo />}
+      </div>
+
+      <Card className="py-0">
+        <CardHeader className="pt-5">
+          <CardTitle className="text-base">Todo el equipo</CardTitle>
+          <CardDescription>
+            Cada persona accede con su email y contraseña propios.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="px-0 pb-2">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nombre</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Área</TableHead>
+                  <TableHead>Estado</TableHead>
+                  <TableHead>Alta</TableHead>
+                  {usuario.rol === "gerente" && (
+                    <TableHead className="text-right">Acciones</TableHead>
+                  )}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {miembros.map((m) => {
+                  const rol = ROLES_USUARIO[m.rol];
+                  return (
+                    <TableRow
+                      key={m.id}
+                      className={!m.activo ? "opacity-60" : undefined}
+                    >
+                      <TableCell className="font-medium">{m.nombre}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {m.email}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={rol.className}>
+                          {rol.etiqueta}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {m.activo ? (
+                          <span className="text-sm text-muted-foreground">
+                            Activo
+                          </span>
+                        ) : (
+                          <Badge variant="outline">Inactivo</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {formatearFecha(m.creadoEn)}
+                      </TableCell>
+                      {usuario.rol === "gerente" && (
+                        <TableCell>
+                          <div className="flex justify-end gap-1">
+                            <EditarMiembroEquipo miembro={m} />
+                            {m.activo ? (
+                              m.id !== usuario.id && (
+                                <EliminarMiembroEquipo miembro={m} />
+                              )
+                            ) : (
+                              <ReactivarMiembroEquipo miembro={m} />
+                            )}
+                          </div>
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
       <div>
-        <h2 className="font-heading text-2xl font-semibold tracking-tight">
-          Equipo de ventas
-        </h2>
+        <h3 className="font-heading text-xl font-semibold tracking-tight">
+          Ranking de ventas
+        </h3>
         <p className="text-sm text-muted-foreground">
           Niveles, experiencia e insignias: la competencia sana también vende.
         </p>

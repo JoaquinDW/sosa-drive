@@ -1,21 +1,27 @@
 import "server-only";
 
 import { query } from "./db/pool";
+import { formatearPesosCompacto, pluralizar } from "./format";
 import type {
+  AlertaOperativa,
   ClienteOperaciones,
   Compra,
   Credito,
   Cuota,
   Deudor,
+  EstadoCredito,
   Gasto,
   GastoTaller,
   KpisFinancieros,
   MovimientoCaja,
   MovimientoInventario,
   OrdenTaller,
+  RankingVendedor,
   RegistroAuditoria,
   Repuesto,
+  ResumenPlan,
   UnidadInventario,
+  VencimientoProximo,
   Venta,
 } from "./types";
 
@@ -152,11 +158,8 @@ export async function obtenerClientesOperaciones(): Promise<
   }));
 }
 
-export async function obtenerCreditos(): Promise<Credito[]> {
-  const filas = await query(
-    "select * from creditos order by numero nulls last, creado_en desc",
-  );
-  return filas.map((f) => ({
+function mapearCredito(f: Fila): Credito {
+  return {
     id: f.id,
     numero: f.numero ?? undefined,
     ventaId: f.venta_id ?? undefined,
@@ -166,15 +169,28 @@ export async function obtenerCreditos(): Promise<Credito[]> {
     cuotaMensual: num(f.cuota_mensual),
     totalAPagar: num(f.total_a_pagar),
     cantidadCuotas: f.cantidad_cuotas ?? undefined,
+    diaPago: f.dia_pago ?? undefined,
+    fechaInicio: f.fecha_inicio ?? undefined,
     estado: f.estado,
     observaciones: f.observaciones ?? undefined,
     creadoEn: f.creado_en,
-  }));
+  };
 }
 
-export async function obtenerCuotas(): Promise<Cuota[]> {
-  const filas = await query("select * from cuotas order by vencimiento");
-  return filas.map((f) => ({
+export async function obtenerCreditos(): Promise<Credito[]> {
+  const filas = await query(
+    "select * from creditos order by numero nulls last, creado_en desc",
+  );
+  return filas.map(mapearCredito);
+}
+
+export async function obtenerCredito(id: string): Promise<Credito | undefined> {
+  const filas = await query("select * from creditos where id = $1", [id]);
+  return filas[0] ? mapearCredito(filas[0]) : undefined;
+}
+
+function mapearCuota(f: Fila): Cuota {
+  return {
     id: f.id,
     creditoId: f.credito_id,
     numero: f.numero,
@@ -182,7 +198,22 @@ export async function obtenerCuotas(): Promise<Cuota[]> {
     monto: Number(f.monto),
     estado: f.estado,
     pagadaEn: f.pagada_en ?? undefined,
-  }));
+  };
+}
+
+export async function obtenerCuotas(): Promise<Cuota[]> {
+  const filas = await query("select * from cuotas order by vencimiento");
+  return filas.map(mapearCuota);
+}
+
+export async function obtenerCuotasDeCredito(
+  creditoId: string,
+): Promise<Cuota[]> {
+  const filas = await query(
+    "select * from cuotas where credito_id = $1 order by numero",
+    [creditoId],
+  );
+  return filas.map(mapearCuota);
 }
 
 export async function obtenerOrdenesTaller(): Promise<OrdenTaller[]> {
@@ -285,6 +316,18 @@ function hoyISO(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/**
+ * Mes sobre el que se muestran los indicadores (`YYYY-MM`). Si el mes en curso
+ * todavía no registró ventas (p. ej. recién arranca), cae al último con
+ * actividad para no mostrar un dashboard en cero.
+ */
+export function calcularMesActivo(ventas: Venta[]): string {
+  const mes = hoyISO().slice(0, 7);
+  if (ventas.some((v) => v.fecha.startsWith(mes))) return mes;
+  const conVentas = [...new Set(ventas.map((v) => v.fecha.slice(0, 7)))].sort();
+  return conVentas.at(-1) ?? mes;
+}
+
 /** Marca como vencidas las cuotas pendientes cuyo vencimiento ya pasó. */
 export function conVencimientos(cuotas: Cuota[]): Cuota[] {
   const hoy = hoyISO();
@@ -293,6 +336,49 @@ export function conVencimientos(cuotas: Cuota[]): Cuota[] {
       ? { ...c, estado: "vencida" as const }
       : c,
   );
+}
+
+/**
+ * Estado que corresponde al plan según sus cuotas, no el que quedó guardado.
+ * `cancelado` y `refinanciado` los decide una persona: esos se respetan.
+ */
+export function estadoEfectivoCredito(
+  credito: Credito,
+  cuotasDelCredito: Cuota[],
+): EstadoCredito {
+  if (credito.estado === "cancelado" || credito.estado === "refinanciado") {
+    return credito.estado;
+  }
+  const efectivas = conVencimientos(cuotasDelCredito);
+  if (efectivas.length === 0) return credito.estado;
+  if (efectivas.some((c) => c.estado === "vencida")) return "en_mora";
+  if (efectivas.every((c) => c.estado === "pagada")) return "cancelado";
+  return "al_dia";
+}
+
+/** Lo que hay que saber de un plan de un vistazo: cuánto pagó y cuánto debe. */
+export function resumirPlan(
+  credito: Credito,
+  cuotasDelCredito: Cuota[],
+): ResumenPlan {
+  const efectivas = conVencimientos(cuotasDelCredito);
+  const pagadas = efectivas.filter((c) => c.estado === "pagada");
+  const vencidas = efectivas.filter((c) => c.estado === "vencida");
+  const pendientes = efectivas.filter((c) => c.estado === "pendiente");
+  const proxima = pendientes
+    .slice()
+    .sort((a, b) => (a.vencimiento < b.vencimiento ? -1 : 1))[0];
+
+  return {
+    estado: estadoEfectivoCredito(credito, cuotasDelCredito),
+    cuotas: efectivas.length,
+    cuotasPagadas: pagadas.length,
+    cuotasVencidas: vencidas.length,
+    cobrado: pagadas.reduce((acc, c) => acc + c.monto, 0),
+    montoVencido: vencidas.reduce((acc, c) => acc + c.monto, 0),
+    saldo: [...vencidas, ...pendientes].reduce((acc, c) => acc + c.monto, 0),
+    proximoVencimiento: proxima?.vencimiento,
+  };
 }
 
 export async function obtenerDeudores(): Promise<Deudor[]> {
@@ -347,15 +433,7 @@ export async function obtenerKpisFinancieros(): Promise<KpisFinancieros> {
       obtenerMovimientosCaja(),
     ]);
 
-  const mes = hoyISO().slice(0, 7);
-  // Si el mes en curso todavía no registró ventas (p. ej. recién arranca),
-  // se muestra el último mes con actividad.
-  const mesesConVentas = [...new Set(ventas.map((v) => v.fecha.slice(0, 7)))]
-    .sort()
-    .reverse();
-  const mesActivo = ventas.some((v) => v.fecha.startsWith(mes))
-    ? mes
-    : (mesesConVentas[0] ?? mes);
+  const mesActivo = calcularMesActivo(ventas);
 
   const enStock = unidades.filter(
     (u) => u.estado !== "vendida" && u.estado !== "baja",
@@ -411,4 +489,159 @@ export async function obtenerKpisFinancieros(): Promise<KpisFinancieros> {
       0,
     ),
   };
+}
+
+/** Ventas, facturación y ganancia por vendedor en el mes activo. */
+export async function obtenerRankingVendedores(): Promise<RankingVendedor[]> {
+  const ventas = await obtenerVentas();
+  const mesActivo = calcularMesActivo(ventas);
+  const porVendedor = new Map<string, RankingVendedor>();
+
+  for (const v of ventas) {
+    if (!v.fecha.startsWith(mesActivo)) continue;
+    const acc = porVendedor.get(v.vendedor) ?? {
+      nombre: v.vendedor,
+      ventas: 0,
+      facturacion: 0,
+      ganancia: 0,
+    };
+    acc.ventas += 1;
+    acc.facturacion += v.precio ?? 0;
+    acc.ganancia += v.ganancia ?? 0;
+    porVendedor.set(v.vendedor, acc);
+  }
+
+  return [...porVendedor.values()].sort((a, b) => b.facturacion - a.facturacion);
+}
+
+/** Cuotas pendientes que vencen dentro de los próximos `dias` días. */
+export async function obtenerProximosVencimientos(
+  dias = 7,
+): Promise<VencimientoProximo[]> {
+  const [cuotas, creditos, clientes] = await Promise.all([
+    obtenerCuotas(),
+    obtenerCreditos(),
+    obtenerClientesOperaciones(),
+  ]);
+  const hoy = hoyISO();
+  const limite = new Date(`${hoy}T00:00:00Z`);
+  limite.setUTCDate(limite.getUTCDate() + dias);
+  const hasta = limite.toISOString().slice(0, 10);
+
+  const porId = new Map(creditos.map((c) => [c.id, c]));
+  const nombres = new Map(clientes.map((c) => [c.id, c.nombre]));
+
+  return cuotas
+    .filter(
+      (c) =>
+        c.estado === "pendiente" && c.vencimiento >= hoy && c.vencimiento <= hasta,
+    )
+    .sort((a, b) => (a.vencimiento < b.vencimiento ? -1 : 1))
+    .map((cuota) => {
+      const credito = porId.get(cuota.creditoId);
+      return {
+        cuota,
+        clienteNombre:
+          (credito && nombres.get(credito.clienteId)) ?? "Sin nombre",
+        descripcionMoto: credito?.descripcionMoto ?? "—",
+      };
+    });
+}
+
+/**
+ * Alertas calculadas sobre los datos de operaciones: lo que hay que mirar hoy
+ * (mora, caja, stock sin precio, taller demorado, repuestos bajo mínimo).
+ */
+export async function obtenerAlertasOperativas(): Promise<AlertaOperativa[]> {
+  const [kpis, deudores, ordenes, repuestos, unidades] = await Promise.all([
+    obtenerKpisFinancieros(),
+    obtenerDeudores(),
+    obtenerOrdenesTaller(),
+    obtenerRepuestos(),
+    obtenerUnidadesInventario(),
+  ]);
+  const hoy = hoyISO();
+  const alertas: AlertaOperativa[] = [];
+
+  if (deudores.length > 0) {
+    const montoVencido = deudores.reduce((acc, d) => acc + d.montoVencido, 0);
+    alertas.push({
+      id: "mora",
+      severidad: "alta",
+      mensaje: `${pluralizar(deudores.length, "cliente", "clientes")} con cuotas vencidas por ${formatearPesosCompacto(montoVencido)}. El más atrasado lleva ${pluralizar(Math.max(...deudores.map((d) => d.diasAtraso)), "día", "días")}.`,
+      accion: { etiqueta: "Ver deudores", href: "/creditos" },
+    });
+  }
+
+  if (kpis.saldoCaja < 0) {
+    alertas.push({
+      id: "caja-negativa",
+      severidad: "alta",
+      mensaje: `La caja quedó en rojo: ${formatearPesosCompacto(kpis.saldoCaja)}. Revisá los movimientos del mes.`,
+      accion: { etiqueta: "Ver caja", href: "/caja" },
+    });
+  }
+
+  if (kpis.gananciaNetaMes < 0) {
+    alertas.push({
+      id: "ganancia-negativa",
+      severidad: "alta",
+      mensaje: `Los gastos del mes superan la ganancia bruta: neto ${formatearPesosCompacto(kpis.gananciaNetaMes)}.`,
+      accion: { etiqueta: "Ver finanzas", href: "/finanzas" },
+    });
+  }
+
+  const demoradas = ordenes.filter(
+    (o) =>
+      o.fechaEstimada !== undefined &&
+      o.fechaEstimada < hoy &&
+      o.estado !== "finalizada" &&
+      o.estado !== "entregada" &&
+      o.estado !== "cancelada",
+  );
+  if (demoradas.length > 0) {
+    alertas.push({
+      id: "taller-demorado",
+      severidad: "media",
+      mensaje: `${pluralizar(demoradas.length, "orden de taller pasó", "órdenes de taller pasaron")} su fecha estimada de entrega.`,
+      accion: { etiqueta: "Ver taller", href: "/taller" },
+    });
+  }
+
+  if (kpis.unidadesSinPrecio > 0) {
+    alertas.push({
+      id: "sin-precio",
+      severidad: "media",
+      mensaje: `${pluralizar(kpis.unidadesSinPrecio, "unidad del stock no tiene", "unidades del stock no tienen")} precio cargado y no suman al valor del inventario.`,
+      accion: { etiqueta: "Completar stock", href: "/stock" },
+    });
+  }
+
+  const bajoMinimo = repuestos.filter((r) => r.cantidad <= r.stockMinimo);
+  if (bajoMinimo.length > 0) {
+    alertas.push({
+      id: "repuestos-bajos",
+      severidad: "media",
+      mensaje: `${pluralizar(bajoMinimo.length, "repuesto está", "repuestos están")} en o por debajo del stock mínimo.`,
+      accion: { etiqueta: "Ver repuestos", href: "/taller" },
+    });
+  }
+
+  const limite = new Date(`${hoy}T00:00:00Z`);
+  limite.setUTCDate(limite.getUTCDate() - 90);
+  const corte = limite.toISOString().slice(0, 10);
+  const estancadas = unidades.filter(
+    (u) => u.estado === "disponible" && u.fechaIngreso < corte,
+  );
+  if (estancadas.length > 0) {
+    alertas.push({
+      id: "stock-estancado",
+      severidad: "baja",
+      mensaje: `${pluralizar(estancadas.length, "unidad lleva", "unidades llevan")} más de 90 días en stock sin venderse.`,
+      accion: { etiqueta: "Ver stock", href: "/stock" },
+    });
+  }
+
+  const orden = { alta: 0, media: 1, baja: 2 } as const;
+  return alertas.sort((a, b) => orden[a.severidad] - orden[b.severidad]);
 }

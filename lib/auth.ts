@@ -2,17 +2,18 @@ import "server-only";
 
 import { query } from "./db/pool";
 import { obtenerSesion } from "./auth/session";
+import type { Rol } from "./types";
 
 export interface UsuarioActual {
   id: string;
   nombre: string;
-  rol: "gerente" | "vendedor";
+  rol: Rol;
 }
 
 interface FilaPerfil {
   id: string;
   nombre: string;
-  rol: "gerente" | "vendedor";
+  rol: Rol;
 }
 
 export async function usuarioActual(): Promise<UsuarioActual> {

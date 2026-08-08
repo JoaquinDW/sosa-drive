@@ -18,30 +18,23 @@ import {
 import { KpiCard } from "@/components/app/kpi-card";
 import { ListaBarras } from "@/components/app/charts";
 import {
+  calcularMesActivo,
   obtenerGastos,
   obtenerKpisFinancieros,
   obtenerUnidadesInventario,
   obtenerVentas,
 } from "@/lib/data-operaciones";
 import {
+  formatearMes,
   formatearNumero,
   formatearPesos,
   formatearPesosCompacto,
+  nombreMes,
 } from "@/lib/format";
 import { CATEGORIAS_GASTO, METODOS_VENTA } from "@/lib/labels";
 import type { MetodoVenta } from "@/lib/types";
 
 export const metadata = { title: "Finanzas" };
-
-const MESES = [
-  "enero", "febrero", "marzo", "abril", "mayo", "junio",
-  "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
-];
-
-function nombreMes(anioMes: string): string {
-  const [anio, mes] = anioMes.split("-").map(Number);
-  return `${MESES[mes - 1]} ${anio}`;
-}
 
 export default async function FinanzasPage() {
   const [kpis, ventas, gastos, unidades] = await Promise.all([
@@ -61,7 +54,7 @@ export default async function FinanzasPage() {
     porMes.set(mes, acc);
   }
   const meses = [...porMes.entries()].sort(([a], [b]) => (a < b ? -1 : 1));
-  const mesActivo = meses.at(-1)?.[0] ?? "";
+  const mesActivo = calcularMesActivo(ventas);
   const ventasMes = ventas.filter((v) => v.fecha.startsWith(mesActivo));
 
   const porVendedor = new Map<string, number>();
@@ -96,7 +89,7 @@ export default async function FinanzasPage() {
         </h2>
         <p className="text-sm text-muted-foreground">
           La rentabilidad real del negocio, calculada desde las operaciones
-          registradas — {nombreMes(mesActivo)}.
+          registradas — {formatearMes(mesActivo)}.
         </p>
       </div>
 
@@ -129,7 +122,7 @@ export default async function FinanzasPage() {
           icono={Warehouse}
         />
         <KpiCard
-          etiqueta={`Ventas de ${nombreMes(mesActivo).split(" ")[0]}`}
+          etiqueta={`Ventas de ${nombreMes(mesActivo)}`}
           valor={`${kpis.ventasMes} · ${formatearPesosCompacto(kpis.facturacionMes)}`}
           icono={TrendingUp}
         />
@@ -179,7 +172,7 @@ export default async function FinanzasPage() {
             <ListaBarras
               descripcion="Ventas por mes"
               datos={meses.map(([mes, d]) => ({
-                etiqueta: nombreMes(mes),
+                etiqueta: formatearMes(mes),
                 valor: d.cantidad,
               }))}
             />
@@ -199,7 +192,7 @@ export default async function FinanzasPage() {
               colorClase="bg-chart-1"
               formato={formatearPesosCompacto}
               datos={meses.map(([mes, d]) => ({
-                etiqueta: nombreMes(mes),
+                etiqueta: formatearMes(mes),
                 valor: d.facturacion,
               }))}
             />
@@ -209,7 +202,7 @@ export default async function FinanzasPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              Ventas por vendedor ({nombreMes(mesActivo).split(" ")[0]})
+              Ventas por vendedor ({nombreMes(mesActivo)})
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -228,7 +221,7 @@ export default async function FinanzasPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              Ventas por financiación ({nombreMes(mesActivo).split(" ")[0]})
+              Ventas por financiación ({nombreMes(mesActivo)})
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -270,7 +263,7 @@ export default async function FinanzasPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              Gastos por categoría ({nombreMes(mesActivo).split(" ")[0]})
+              Gastos por categoría ({nombreMes(mesActivo)})
             </CardTitle>
             <CardDescription>
               Total del mes: {formatearPesos(kpis.gastosMes)}.

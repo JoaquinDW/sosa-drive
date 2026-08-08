@@ -16,6 +16,7 @@ import type {
 } from "./types";
 import { UNIDADES_JULIO, VENTAS_JUNIO, VENTAS_JULIO } from "./datos-reales";
 import { CARTERA_AGOSTO } from "./datos-cartera";
+import { diaDePagoAnotado, vencimientoDeCuota } from "./creditos";
 
 /**
  * Datos demo del módulo de Operaciones.
@@ -216,17 +217,21 @@ export const creditos: Credito[] = [];
 export const cuotas: Cuota[] = [];
 
 const FECHA_IMPORTACION = "2026-08-03";
-
-/** "todos los 16", "paga los 15", "paga 20" → día de vencimiento del mes. */
-function diaDePago(observaciones?: string): number | undefined {
-  const m = observaciones?.match(/(?:todos los|paga los|paga)\s+(\d{1,2})\b/i);
-  const dia = m ? Number(m[1]) : undefined;
-  return dia && dia >= 1 && dia <= 31 ? dia : undefined;
-}
+const MES_IMPORTACION = "2026-08-01";
 
 for (const [i, c] of CARTERA_AGOSTO.entries()) {
   const cliente = clientes[i];
   const creditoId = `cr-cart-${c.numero ?? `s${i}`}`;
+  // El día de pago venía anotado en las observaciones de la planilla; el que
+  // no lo tiene queda sin definir para que administración lo cargue.
+  const diaPago = diaDePagoAnotado(c.observaciones);
+  const primerVencimiento =
+    c.cuotaMensual !== undefined
+      ? // Sin día anotado, la cuota del mes vence a fin de mes (convención de
+        // la importación, no dato del cliente).
+        vencimientoDeCuota(MES_IMPORTACION, diaPago ?? 31, 1)
+      : undefined;
+
   creditos.push({
     id: creditoId,
     numero: c.numero,
@@ -238,19 +243,19 @@ for (const [i, c] of CARTERA_AGOSTO.entries()) {
       c.cuotaMensual !== undefined && c.cantidadCuotas !== undefined
         ? c.cuotaMensual * c.cantidadCuotas
         : undefined,
+    diaPago,
+    fechaInicio: primerVencimiento,
     estado: "al_dia",
     observaciones: c.observaciones,
     creadoEn: FECHA_IMPORTACION,
   });
-  if (c.cuotaMensual !== undefined) {
-    // Sin día de pago anotado en la planilla, la cuota del mes vence a fin
-    // de mes (convención de la importación, no dato del cliente).
-    const dia = diaDePago(c.observaciones) ?? 31;
+
+  if (c.cuotaMensual !== undefined && primerVencimiento !== undefined) {
     cuotas.push({
       id: `${creditoId}-ago`,
       creditoId,
       numero: 1,
-      vencimiento: `2026-08-${String(Math.min(dia, 31)).padStart(2, "0")}`,
+      vencimiento: primerVencimiento,
       monto: c.cuotaMensual,
       estado: "pendiente",
     });
