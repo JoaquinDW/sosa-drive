@@ -33,6 +33,11 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# sesión de Baileys (bot de WhatsApp)
+/data/
+/bot/auth/
+/bot/node_modules/
+
 # vercel
 .vercel
 

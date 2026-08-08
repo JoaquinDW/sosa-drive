@@ -164,6 +164,66 @@ export interface Mensaje {
   creadoEn: string; // ISO
 }
 
+// ---------------------------------------------------------------------------
+// Módulo WhatsApp (bot de Baileys, tablas wa_* — independientes del CRM)
+// ---------------------------------------------------------------------------
+
+/** 'ia' = responde el bot con OpenAI; 'humano' = responde una persona desde el panel. */
+export type ModoWa = "ia" | "humano";
+
+export type RolWaMensaje = "cliente" | "ia" | "humano";
+
+export type EstadoConexionWa = "desconectado" | "qr" | "conectando" | "conectado";
+
+export interface WaConversacion {
+  id: string; // bigint de Postgres, llega como string
+  telefono: string;
+  nombre: string | null;
+  modo: ModoWa;
+  /** Lead del CRM que el bot creó para este chat. Null hasta que escriban. */
+  leadId: string | null;
+  ultimoMensaje: string | null;
+  ultimoMensajeEn: string | null; // ISO
+}
+
+/**
+ * Ficha del cliente que se muestra al costado del hilo de WhatsApp: lo que el
+ * bot cualificador viene juntando, sin tener que salir del chat. El perfil
+ * completo (timeline, notas) vive en /leads/[id].
+ */
+export interface FichaLeadWa {
+  id: string;
+  nombre: string;
+  telefono: string;
+  ciudad: string;
+  estado: EstadoLead;
+  score: number;
+  scoreMotivo?: string;
+  formaPago: FormaPago;
+  presupuesto?: number;
+  permuta?: string;
+  /** "Honda Wave 110 S", ya resuelto contra el catálogo. */
+  motoInteres?: string;
+  vendedor?: string;
+  creadoEn: string; // ISO
+  ultimoContactoEn?: string; // ISO
+}
+
+export interface WaMensaje {
+  id: string;
+  rol: RolWaMensaje;
+  contenido: string;
+  creadoEn: string; // ISO
+}
+
+export interface WaEstadoConexion {
+  estado: EstadoConexionWa;
+  telefono: string | null;
+  /** QR como PNG data-url, solo cuando hay un código vigente para escanear. */
+  qr: string | null;
+  actualizadoEn: string; // ISO
+}
+
 export interface Tarea {
   id: string;
   titulo: string;

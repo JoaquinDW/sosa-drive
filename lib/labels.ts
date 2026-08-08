@@ -2,6 +2,7 @@ import type {
   CanalVenta,
   CategoriaCaja,
   CategoriaGasto,
+  EstadoConexionWa,
   EstadoCredito,
   EstadoCuota,
   EstadoLead,
@@ -11,6 +12,7 @@ import type {
   FuenteLead,
   MetodoVenta,
   ModoDistribucion,
+  ModoWa,
   Rol,
   TipoEventoAgenda,
   TipoGastoTaller,
@@ -342,4 +344,24 @@ export const CATEGORIAS_CAJA: Record<CategoriaCaja, string> = {
   gasto: "Gasto",
   sueldos: "Sueldos",
   otro: "Otro",
+};
+
+// ---------------------------------------------------------------------------
+// Módulo WhatsApp (bot)
+// ---------------------------------------------------------------------------
+
+export const MODOS_WA: Record<ModoWa, { etiqueta: string; className: string }> =
+  {
+    ia: { etiqueta: "IA", className: BADGE_ROJO },
+    humano: { etiqueta: "Humano", className: BADGE_AMBAR },
+  };
+
+export const ESTADOS_CONEXION_WA: Record<
+  EstadoConexionWa,
+  { etiqueta: string; className: string }
+> = {
+  desconectado: { etiqueta: "Desconectado", className: BADGE_GRIS },
+  qr: { etiqueta: "Esperando escaneo", className: BADGE_AMBAR },
+  conectando: { etiqueta: "Conectando", className: BADGE_AZUL },
+  conectado: { etiqueta: "Conectado", className: BADGE_VERDE },
 };

@@ -1,12 +1,15 @@
 import {
   ChartLine,
+  Columns3,
   Contact,
   HandCoins,
   LayoutDashboard,
+  MessageCircle,
   Receipt,
   ScrollText,
   Settings,
   Trophy,
+  Users,
   Wallet,
   Warehouse,
   Wrench,
@@ -29,6 +32,14 @@ export const SECCIONES_NAV: SeccionNav[] = [
     items: [
       { titulo: "Dashboard", href: "/dashboard", icono: LayoutDashboard },
       { titulo: "Equipo", href: "/equipo", icono: Trophy },
+    ],
+  },
+  {
+    titulo: "Comercial",
+    items: [
+      { titulo: "WhatsApp", href: "/whatsapp", icono: MessageCircle },
+      { titulo: "Leads", href: "/leads", icono: Users },
+      { titulo: "Pipeline", href: "/pipeline", icono: Columns3 },
     ],
   },
   {

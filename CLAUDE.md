@@ -65,3 +65,4 @@ La app consulta **PostgreSQL directamente** con `pg`. No hay modo demo: necesit�
 
 - `lucide-react` v1 ya no trae íconos de marcas: hay SVG propios en `components/app/brand-icons.tsx`.
 - `radix-ui`/`react-slot` usa `createContext` a nivel de módulo, por eso `components/ui/button.tsx` y `badge.tsx` llevan `"use client"`.
+- El Redis del compose se publica en el **puerto 6380** del host (no 6379): en 6379 suele haber un Redis local de Homebrew que se roba las conexiones de la app y parte en dos las colas del bot de WhatsApp. `REDIS_URL` va a `localhost:6380`.

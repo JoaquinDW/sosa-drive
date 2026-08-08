@@ -24,7 +24,9 @@ services:
     image: redis:7-alpine
     container_name: sosa-redis
     ports:
-      - "6379:6379"
+      # 6380 en el host: 127.0.0.1:6379 suele estar ocupado por un Redis local
+      # (Homebrew) y la app terminaría hablándole a ese en vez de a este.
+      - "6380:6379"
     volumes:
       - sosa-redis-data:/data
     healthcheck:
@@ -32,6 +34,29 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  # Bot de WhatsApp (Baileys + OpenAI). Levantalo con `docker compose up -d bot`.
+  # No expone puertos: el panel es la sección /whatsapp de la app Next.
+  bot:
+    build: ./bot
+    container_name: sosa-bot
+    env_file: .env.local # OPENAI_API_KEY / OPENAI_MODEL
+    environment:
+      # Pisan a env_file: dentro del compose se resuelve por DNS interno.
+      DATABASE_URL: postgres://sosa:sosa@postgres:5432/sosa_drive
+      REDIS_URL: redis://redis:6379
+    volumes:
+      - ./bot:/app
+      # Volumen anónimo: evita que el bind mount tape el node_modules de la imagen.
+      - /app/node_modules
+      # Sesión de Baileys persistente (no vuelve a pedir QR entre reinicios).
+      - ./data/wa-auth:/app/auth
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
 
   # Explorador web de la base (opcional): http://localhost:8080
   adminer:

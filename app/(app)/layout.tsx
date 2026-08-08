@@ -17,7 +17,13 @@ export default async function AppLayout({
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col lg:pl-60">
         <Topbar nombreUsuario={usuario.nombre} rolUsuario={usuario.rol} />
-        <main className="mx-auto w-full max-w-7xl flex-1 p-4 sm:p-6">
+        {/*
+          Ancho acotado por defecto: tablas y dashboards se leen mejor sin
+          líneas de 1900px. Una página que necesita todo el ancho (el chat de
+          /whatsapp, con sus tres columnas) lo pide marcando cualquier nodo
+          suyo con `data-ancho-completo`.
+        */}
+        <main className="mx-auto w-full max-w-7xl flex-1 p-4 has-data-ancho-completo:max-w-none sm:p-6">
           {children}
         </main>
       </div>
