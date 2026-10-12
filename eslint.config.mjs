@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // El servicio bot tiene su propio package/tsconfig (corre fuera de Next).
     "bot/**",
+    // App de consultorios: proyecto Next aparte con su propio package/tsconfig.
+    "consultorios/**",
   ]),
 ]);
 

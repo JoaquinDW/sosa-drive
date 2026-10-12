@@ -1,0 +1,11 @@
+# CLAUDE.md — consultorios
+
+App independiente dentro del repo de Sosa Drive (su propio `package.json`,
+`tsconfig`, `docker-compose` y base). Ver `README.md` para comandos y alcance.
+
+- Next.js 16: el middleware vive en `proxy.ts`. Consultá `node_modules/next/dist/docs/` antes de usar APIs de Next.
+- UI en español rioplatense (vos). Dominio en español: tablas `snake_case`, funciones y tipos en camelCase.
+- No guardar datos clínicos (diagnósticos, tratamientos, historia clínica). Las notas son administrativas.
+- Fechas de turnos: `timestamptz` en la base; la conversión a la zona del consultorio se hace en SQL (`lib/data.ts`). La UI trabaja con strings `YYYY-MM-DD` / `HH:MM`.
+- Las superposiciones las impide la constraint `turnos_sin_superposicion` (error `23P01`).
+- No hay tests: validá con `npm run lint` y `npm run build`.
